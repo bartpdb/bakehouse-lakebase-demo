@@ -1,0 +1,21 @@
+command:
+  - flask
+  - --app
+  - app.py
+  - run
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+
+env:
+  - name: PGHOST
+    value: ep-old-pine-d7a1ivpy.database.eu-central-1.cloud.databricks.com
+  - name: PGDATABASE
+    value: databricks_postgres
+  - name: PGPORT
+    value: "5432"
+  - name: PGSSLMODE
+    value: require
+  - name: ENDPOINT_NAME
+    value: projects/bakehouse-lakebase/branches/br-steep-cell-d7kts53s/endpoints/primary

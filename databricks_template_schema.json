@@ -1,0 +1,23 @@
+{
+  "welcome_message": "\n🍪 Bakehouse Cookie Co. — Lakebase + Lakehouse Demo\n\nThis template sets up a full Customer 360 app demonstrating\nLakebase (OLTP) + Lakehouse (OLAP) working together.\n",
+  "properties": {
+    "project_name": {
+      "type": "string",
+      "default": "bakehouse-lakebase-demo",
+      "description": "Project name (used for bundle name and resource prefixes)",
+      "order": 1
+    },
+    "catalog": {
+      "type": "string",
+      "default": "",
+      "description": "Unity Catalog name for your workspace (run 'databricks catalogs list' to find it)",
+      "order": 2
+    },
+    "schema": {
+      "type": "string",
+      "default": "lakebase_demo",
+      "description": "Schema name for pipeline tables",
+      "order": 3
+    }
+  }
+}

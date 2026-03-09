@@ -1,0 +1,73 @@
+bundle:
+  name: {{.project_name}}
+
+variables:
+  catalog:
+    description: "Unity Catalog name for this workspace"
+    default: {{.catalog}}
+  schema:
+    description: Schema for pipeline tables and synced tables
+    default: {{.schema}}
+
+resources:
+  pipelines:
+    cookies_analytics:
+      name: "Bakehouse - Cookies Analytics Pipeline"
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      libraries:
+        - notebook:
+            path: src/pipeline/cookies_sdp_pipeline.sql
+
+  jobs:
+    setup:
+      name: "Bakehouse - Initial Setup"
+      tasks:
+        - task_key: setup_lakebase
+          notebook_task:
+            notebook_path: src/notebooks/00_setup_lakebase.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          environment_key: setup_env
+        - task_key: create_churn_model
+          depends_on:
+            - task_key: setup_lakebase
+          notebook_task:
+            notebook_path: src/notebooks/01_create_churn_model.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          environment_key: setup_env
+        - task_key: create_genie_space
+          depends_on:
+            - task_key: setup_lakebase
+          notebook_task:
+            notebook_path: src/notebooks/02_create_genie_space.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          environment_key: setup_env
+      queue:
+        enabled: true
+      environments:
+        - environment_key: setup_env
+          spec:
+            client: "2"
+            dependencies:
+              - databricks-sdk>=0.81.0
+              - "psycopg[binary]"
+              - mlflow
+              - pandas
+      max_concurrent_runs: 1
+
+  apps:
+    customer360:
+      name: lakebase-c360
+      description: "Bakehouse Cookie Co. Customer 360 — Operational + Analytical data powered by Lakebase"
+      source_code_path: src/app
+
+targets:
+  default:
+    default: true

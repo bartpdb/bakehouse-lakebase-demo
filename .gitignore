@@ -1,0 +1,8 @@
+.bundle/
+.databricks/
+.cursor/
+assets/
+__pycache__/
+*.pyc
+.DS_Store
+.env
