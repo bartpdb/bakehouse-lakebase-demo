@@ -329,7 +329,7 @@ rows = query_to_rows("""
            CONCAT(INITCAP(TRIM(first_name)), ' ', INITCAP(TRIM(last_name))),
            phone_number, TRIM(address), TRIM(city), TRIM(state), TRIM(country), TRIM(continent),
            postal_zip_code, gender
-    FROM samples.bakehouse.sales_customer WHERE customerID IS NOT NULL
+    FROM samples.bakehouse.sales_customers WHERE customerID IS NOT NULL
 """)
 print(f"Seeding {len(rows)} customers...")
 ph = ",".join(["%s"] * 13)

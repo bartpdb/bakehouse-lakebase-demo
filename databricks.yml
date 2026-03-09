@@ -4,7 +4,7 @@ bundle:
 variables:
   catalog:
     description: "Unity Catalog name for this workspace (find via: databricks catalogs list)"
-    default: CHANGE_ME
+    default: serverless_stable_0rue6s_catalog
   schema:
     description: Schema for pipeline tables and synced tables
     default: lakebase_demo

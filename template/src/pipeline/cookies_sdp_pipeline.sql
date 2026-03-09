@@ -32,7 +32,7 @@ CREATE TEMPORARY VIEW bronze_customers
 COMMENT "Raw customer data from source system"
 AS SELECT
   *
-FROM samples.bakehouse.sales_customer
+FROM samples.bakehouse.sales_customers
 
 -- COMMAND ----------
 
@@ -46,24 +46,13 @@ FROM samples.bakehouse.sales_franchises
 -- COMMAND ----------
 
 -- DBTITLE 0,Bronze: Transactions (Delta Share + Lakebase)
+-- TODO: Once Lakehouse Federation to Lakebase is configured, add UNION ALL
+-- with lakebase_operational.public.transactions to include new app orders
 CREATE TEMPORARY VIEW bronze_transactions
-COMMENT "Transaction data from Delta Share (historical) combined with new operational transactions from Lakebase"
-AS
-SELECT * FROM samples.bakehouse.sales_transactions
-UNION ALL
-SELECT
-  transactionid AS transactionID,
-  customerid AS customerID,
-  franchiseid AS franchiseID,
-  datetime AS dateTime,
-  product,
-  quantity,
-  unitprice AS unitPrice,
-  totalprice AS totalPrice,
-  payment_method AS paymentMethod,
-  cardnumber AS cardNumber
-FROM lakebase_operational.public.transactions
-WHERE datetime > (SELECT COALESCE(MAX(dateTime), '1970-01-01') FROM samples.bakehouse.sales_transactions)
+COMMENT "Transaction data from source system"
+AS SELECT
+  *
+FROM samples.bakehouse.sales_transactions
 
 -- COMMAND ----------
 
