@@ -12,20 +12,50 @@ app = Flask(__name__)
 
 w = WorkspaceClient()
 
+PROJECT_NAME = os.environ.get("LAKEBASE_PROJECT", "bakehouse-lakebase")
+
+
+def discover_lakebase():
+    """Auto-discover Lakebase connection details from the project name."""
+    pghost = os.environ.get("PGHOST")
+    endpoint_name = os.environ.get("ENDPOINT_NAME")
+
+    if pghost and endpoint_name and "FILL_IN" not in pghost:
+        return pghost, endpoint_name
+
+    auth = w.config._header_factory()
+    host = w.config.host
+
+    projects = http_requests.get(f"{host}/api/2.0/postgres/projects", headers=auth).json().get("projects", [])
+    project = next((p for p in projects if PROJECT_NAME in p.get("name", "")), None)
+    if not project:
+        raise RuntimeError(f"Lakebase project '{PROJECT_NAME}' not found. Run the setup job first.")
+
+    full_name = project["name"] if project["name"].startswith("projects/") else f"projects/{project['name']}"
+    branches = http_requests.get(f"{host}/api/2.0/postgres/{full_name}/branches", headers=auth).json().get("branches", [])
+    branch = branches[0]["name"]
+    endpoints = http_requests.get(f"{host}/api/2.0/postgres/{branch}/endpoints", headers=auth).json().get("endpoints", [])
+    ep = endpoints[0]
+
+    return ep["status"]["hosts"]["host"], ep["name"]
+
+
+PGHOST, ENDPOINT_NAME = discover_lakebase()
+print(f"Lakebase: {PGHOST} / {ENDPOINT_NAME}")
+
 
 class OAuthConnection(psycopg.Connection):
     @classmethod
     def connect(cls, conninfo='', **kwargs):
-        endpoint_name = os.environ["ENDPOINT_NAME"]
-        credential = w.postgres.generate_database_credential(endpoint=endpoint_name)
+        credential = w.postgres.generate_database_credential(endpoint=ENDPOINT_NAME)
         kwargs['password'] = credential.token
         return super().connect(conninfo, **kwargs)
 
 
 username = os.environ.get("PGUSER") or os.environ.get("DATABRICKS_CLIENT_ID") or w.current_user.me().user_name
-host = os.environ["PGHOST"]
+host = PGHOST
 port = os.environ.get("PGPORT", "5432")
-database = os.environ["PGDATABASE"]
+database = os.environ.get("PGDATABASE", "databricks_postgres")
 sslmode = os.environ.get("PGSSLMODE", "require")
 
 pool = ConnectionPool(
