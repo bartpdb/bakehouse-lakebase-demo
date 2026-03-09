@@ -113,14 +113,11 @@ if project:
     print(f"Lakebase project already exists: {project['name']}")
 else:
     print(f"Creating Lakebase project: {PROJECT_NAME}...")
-    resp = requests.post(f"{host}/api/2.0/postgres/projects", headers=api_headers(), json={
-        "project_id": PROJECT_NAME,
-        "project": {
-            "spec": {
-                "display_name": PROJECT_NAME,
-                "pg_version": "17",
-                "enable_pg_native_login": True,
-            }
+    resp = requests.post(f"{host}/api/2.0/postgres/projects?project_id={PROJECT_NAME}", headers=api_headers(), json={
+        "spec": {
+            "display_name": PROJECT_NAME,
+            "pg_version": "17",
+            "enable_pg_native_login": True,
         }
     })
     if resp.status_code in (200, 201):
