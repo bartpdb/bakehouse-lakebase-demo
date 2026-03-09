@@ -44,6 +44,14 @@ if not WAREHOUSE_ID:
     raise RuntimeError("No SQL warehouse found")
 print(f"Using catalog={CATALOG}, warehouse={WAREHOUSE_ID}")
 
+existing_spaces = requests.get(f"{host}/api/2.0/genie/spaces", headers=auth).json()
+for s in existing_spaces.get("spaces", []):
+    if "Bakehouse" in s.get("title", ""):
+        space_id = s["space_id"]
+        print(f"Genie space already exists: {space_id}")
+        print(f"URL: {host}/genie/rooms/{space_id}")
+        dbutils.notebook.exit(json.dumps({"genie_space_id": space_id}))
+
 tables = sorted([
     f"{CATALOG}.{SCHEMA}.gold_customer_insights",
     f"{CATALOG}.{SCHEMA}.gold_franchise_performance",

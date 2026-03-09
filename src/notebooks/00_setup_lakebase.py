@@ -133,11 +133,12 @@ else:
                 project = p
                 break
         if project:
-            state = project.get("status", {}).get("compute_last_active_time")
-            if state:
+            status = project.get("status", {})
+            is_ready = status.get("compute_last_active_time") or status.get("current_state") == "READY"
+            if is_ready:
                 print("Lakebase project is active")
                 break
-            print("  Waiting for project to become active...")
+            print(f"  Waiting for project to become active (state: {status.get('current_state', 'unknown')})...")
 
 if not project:
     raise RuntimeError("Failed to create Lakebase project")
@@ -149,8 +150,8 @@ if not project:
 
 # COMMAND ----------
 
-project_name = project["name"].split("/")[-1] if "/" not in project["name"] else project["name"].replace("projects/", "")
-full_project_name = project["name"] if project["name"].startswith("projects/") else f"projects/{project['name']}"
+raw_name = project["name"]
+full_project_name = raw_name if raw_name.startswith("projects/") else f"projects/{raw_name}"
 
 branches_resp = requests.get(f"{host}/api/2.0/postgres/{full_project_name}/branches", headers=api_headers())
 branches = branches_resp.json().get("branches", [])
@@ -417,8 +418,23 @@ else:
         try:
             cur.execute(g)
             conn.commit()
+            print(f"  OK: {g[:60]}...")
         except Exception as e:
             conn.rollback()
+            print(f"  SKIP: {e}")
+
+    # lakebase_demo schema may not exist yet (created after pipeline + synced table)
+    for g in [
+        f'GRANT USAGE ON SCHEMA lakebase_demo TO "{sp_id}"',
+        f'GRANT SELECT ON ALL TABLES IN SCHEMA lakebase_demo TO "{sp_id}"',
+    ]:
+        try:
+            cur.execute(g)
+            conn.commit()
+            print(f"  OK: {g[:60]}...")
+        except Exception:
+            conn.rollback()
+            print(f"  SKIP (schema may not exist yet, re-run after creating synced table)")
 
     for stmt in [
         f"GRANT USE CATALOG ON CATALOG {CATALOG} TO `{sp_id}`",
