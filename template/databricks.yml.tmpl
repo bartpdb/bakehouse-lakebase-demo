@@ -49,6 +49,22 @@ resources:
               catalog: ${var.catalog}
               schema: ${var.schema}
           environment_key: setup_env
+        - task_key: run_pipeline
+          depends_on:
+            - task_key: create_churn_model
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.cookies_analytics.id}
+            full_refresh: true
+        - task_key: finalize_permissions
+          depends_on:
+            - task_key: run_pipeline
+            - task_key: create_genie_space
+          notebook_task:
+            notebook_path: src/notebooks/03_finalize_permissions.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          environment_key: setup_env
       queue:
         enabled: true
       environments:

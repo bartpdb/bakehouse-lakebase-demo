@@ -4,7 +4,7 @@ bundle:
 variables:
   catalog:
     description: "Unity Catalog name for this workspace (find via: databricks catalogs list)"
-    default: serverless_stable_0rue6s_catalog
+    default: CHANGE_ME
   schema:
     description: Schema for pipeline tables and synced tables
     default: lakebase_demo
@@ -45,6 +45,22 @@ resources:
             - task_key: setup_lakebase
           notebook_task:
             notebook_path: src/notebooks/02_create_genie_space.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          environment_key: setup_env
+        - task_key: run_pipeline
+          depends_on:
+            - task_key: create_churn_model
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.cookies_analytics.id}
+            full_refresh: true
+        - task_key: finalize_permissions
+          depends_on:
+            - task_key: run_pipeline
+            - task_key: create_genie_space
+          notebook_task:
+            notebook_path: src/notebooks/03_finalize_permissions.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
