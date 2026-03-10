@@ -156,5 +156,35 @@ for s in spaces.get("spaces", []):
         print(f"  Genie OK: {s['space_id']}")
         break
 
-print("\nAll permissions finalized!")
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Seed gold_live from Synced Table
+
+# COMMAND ----------
+
+cred = w.postgres.generate_database_credential(endpoint=ENDPOINT_NAME)
+conn = psycopg.connect(
+    host=PGHOST, port=5432, dbname=PGDATABASE,
+    user=user, password=cred.token, sslmode="require"
+)
+cur = conn.cursor()
+
+try:
+    cur.execute("DELETE FROM gold_live")
+    cur.execute("""
+        INSERT INTO gold_live
+        SELECT g.*, NOW() as updated_at, 'synced' as source
+        FROM lakebase_demo.gold_insights g
+    """)
+    conn.commit()
+    cur.execute("SELECT COUNT(*) FROM gold_live")
+    print(f"gold_live seeded: {cur.fetchone()[0]} rows")
+except Exception as e:
+    conn.rollback()
+    print(f"gold_live seed failed: {e}")
+
+conn.close()
+
+print("\nAll permissions finalized and gold_live seeded!")
 dbutils.notebook.exit(json.dumps({"status": "complete", "service_principal": sp_id}))
