@@ -321,7 +321,24 @@ def api_products():
 # API: Genie (AI/BI natural language queries)
 # ---------------------------------------------------------------------------
 
-GENIE_SPACE_ID = os.environ.get("GENIE_SPACE_ID", "")
+def discover_genie_space():
+    """Auto-discover the Bakehouse Genie space."""
+    space_id = os.environ.get("GENIE_SPACE_ID", "")
+    if space_id:
+        return space_id
+    try:
+        auth = w.config._header_factory()
+        spaces = http_requests.get(f"{w.config.host}/api/2.0/genie/spaces", headers=auth).json()
+        for s in spaces.get("spaces", []):
+            if "Bakehouse" in s.get("title", "") or "bakehouse" in s.get("title", "").lower():
+                return s["space_id"]
+    except Exception:
+        pass
+    return ""
+
+
+GENIE_SPACE_ID = discover_genie_space()
+print(f"Genie Space: {GENIE_SPACE_ID or 'not found'}")
 
 
 def genie_headers():
