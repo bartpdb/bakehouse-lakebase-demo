@@ -388,7 +388,7 @@ apps_resp = requests.get(f"{host}/api/2.0/apps", headers=api_headers())
 apps = apps_resp.json().get("apps", [])
 sp_id = None
 for a in apps:
-    if "lakebase" in a.get("name", "").lower() or "c360" in a.get("name", "").lower():
+    if "bakehouse" in a.get("name", "").lower() or "lakebase" in a.get("name", "").lower() or "c360" in a.get("name", "").lower():
         sp_id = a.get("service_principal_client_id")
         print(f"Found app: {a['name']} with SP: {sp_id}")
         break
