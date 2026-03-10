@@ -55,16 +55,6 @@ resources:
           pipeline_task:
             pipeline_id: ${resources.pipelines.cookies_analytics.id}
             full_refresh: true
-        - task_key: finalize_permissions
-          depends_on:
-            - task_key: run_pipeline
-            - task_key: create_genie_space
-          notebook_task:
-            notebook_path: src/notebooks/03_finalize_permissions.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-          environment_key: setup_env
       queue:
         enabled: true
       environments:
@@ -76,6 +66,25 @@ resources:
               - "psycopg[binary]"
               - mlflow
               - pandas
+      max_concurrent_runs: 1
+
+    finalize:
+      name: "Bakehouse - Finalize Permissions"
+      tasks:
+        - task_key: finalize_permissions
+          notebook_task:
+            notebook_path: src/notebooks/03_finalize_permissions.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          environment_key: finalize_env
+      environments:
+        - environment_key: finalize_env
+          spec:
+            client: "2"
+            dependencies:
+              - databricks-sdk>=0.81.0
+              - "psycopg[binary]"
       max_concurrent_runs: 1
 
   apps:
