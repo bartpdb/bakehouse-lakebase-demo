@@ -99,6 +99,20 @@ conn = psycopg.connect(
 )
 cur = conn.cursor()
 
+try:
+    cur.execute("CREATE EXTENSION IF NOT EXISTS databricks_auth")
+    conn.commit()
+except Exception:
+    conn.rollback()
+
+try:
+    cur.execute(f"SELECT databricks_create_role('{sp_id}', 'service_principal')")
+    conn.commit()
+    print(f"  Created OAuth role for {sp_id}")
+except Exception:
+    conn.rollback()
+    print(f"  OAuth role already exists for {sp_id}")
+
 grants = [
     f'GRANT CONNECT ON DATABASE {PGDATABASE} TO "{sp_id}"',
     f'GRANT USAGE ON SCHEMA public TO "{sp_id}"',
