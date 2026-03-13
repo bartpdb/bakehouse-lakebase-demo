@@ -158,7 +158,12 @@ def api_place_order():
     if not all([customer_id, franchise_id, product]):
         return jsonify({"error": "Missing required fields"}), 400
 
-    total_price = quantity * unit_price
+    if not isinstance(quantity, (int, float)) or quantity < 1 or quantity > 1000:
+        return jsonify({"error": "Invalid quantity"}), 400
+    if not isinstance(unit_price, (int, float)) or unit_price < 1 or unit_price > 10000:
+        return jsonify({"error": "Invalid unit price"}), 400
+
+    total_price = int(quantity) * int(unit_price)
     now = datetime.datetime.now()
 
     with pool.connection() as conn:
@@ -194,6 +199,8 @@ def api_send_retention_offer():
 
     if not customer_id:
         return jsonify({"error": "Missing customer_id"}), 400
+    if len(offer_detail) > 500:
+        return jsonify({"error": "Offer detail too long"}), 400
 
     now = datetime.datetime.now()
 
@@ -294,7 +301,8 @@ def api_refresh_analytics():
 
         return jsonify({"success": True, "message": "Analytics updated with latest transactions."})
     except Exception as e:
-        return jsonify({"success": False, "message": f"Error: {str(e)}"})
+        print(f"Refresh analytics error: {e}")
+        return jsonify({"success": False, "message": "Failed to refresh analytics. Please try again."})
 
 
 # ---------------------------------------------------------------------------
@@ -349,9 +357,12 @@ def genie_headers():
 @app.route("/api/genie/ask", methods=["POST"])
 def api_genie_ask():
     data = request.json
-    question = data.get("question", "")
+    question = data.get("question", "").strip()[:1000]
     if not question:
         return jsonify({"error": "No question provided"}), 400
+
+    if not GENIE_SPACE_ID:
+        return jsonify({"error": "Genie space not configured"}), 503
 
     host = w.config.host
     hdrs = genie_headers()
@@ -362,14 +373,16 @@ def api_genie_ask():
         json={"content": question}
     )
     if resp.status_code != 200:
-        return jsonify({"error": f"Genie API error: {resp.text}"}), 500
+        print(f"Genie API error: {resp.text}")
+        return jsonify({"error": "Genie is temporarily unavailable. Please try again."}), 500
 
     conv = resp.json()
     conversation_id = conv.get("conversation_id", "")
     message_id = conv.get("message_id", "")
 
     if not conversation_id or not message_id:
-        return jsonify({"error": "Failed to start conversation", "raw": conv}), 500
+        print(f"Genie conversation error: {conv}")
+        return jsonify({"error": "Failed to start conversation. Please try again."}), 500
 
     result = poll_genie_message(host, hdrs, conversation_id, message_id)
     return jsonify(result)
@@ -390,7 +403,8 @@ def api_genie_followup():
         json={"content": question}
     )
     if resp.status_code != 200:
-        return jsonify({"error": f"Genie API error: {resp.text}"}), 500
+        print(f"Genie API error: {resp.text}")
+        return jsonify({"error": "Genie is temporarily unavailable. Please try again."}), 500
 
     msg = resp.json()
     message_id = msg.get("message_id", "")
@@ -691,6 +705,13 @@ let products = [];
 fetch('/api/franchises').then(r=>r.json()).then(d => franchises = d);
 fetch('/api/products').then(r=>r.json()).then(d => products = d);
 
+function esc(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
 function segmentBadge(segment) {
   if (!segment) return '';
   const s = segment.toLowerCase();
@@ -700,7 +721,7 @@ function segmentBadge(segment) {
   else if (s.includes('medium')) cls = 'badge-medium';
   else if (s.includes('low')) cls = 'badge-low';
   else if (s.includes('churn') || s.includes('risk')) cls = 'badge-churning';
-  return `<span class="badge ${cls}">${segment}</span>`;
+  return `<span class="badge ${cls}">${esc(segment)}</span>`;
 }
 
 function churnColor(p) {
@@ -777,11 +798,11 @@ function renderList(customers) {
   }
   el.innerHTML = customers.map(c => {
     const initials = ((c.first_name||'?')[0] + (c.last_name||'?')[0]).toUpperCase();
-    return `<div class="customer-item ${c.id === activeId ? 'active' : ''}" onclick="selectCustomer(${c.id})">
-      <div class="avatar">${initials}</div>
+    return `<div class="customer-item ${c.id === activeId ? 'active' : ''}" onclick="selectCustomer(${parseInt(c.id)||0})">
+      <div class="avatar">${esc(initials)}</div>
       <div class="customer-info">
-        <h3>${c.full_name || (c.first_name + ' ' + c.last_name)}</h3>
-        <p>${c.city || ''}${c.country ? ', ' + c.country : ''}</p>
+        <h3>${esc(c.full_name || (c.first_name + ' ' + c.last_name))}</h3>
+        <p>${esc(c.city || '')}${c.country ? ', ' + esc(c.country) : ''}</p>
       </div>
       <div class="customer-meta">
         <div class="ltv">${fmtCur(c.lifetime_value)}</div>
@@ -805,34 +826,35 @@ function renderDetail(c) {
   const initials = ((c.first_name||'?')[0] + (c.last_name||'?')[0]).toUpperCase();
   const isChurning = c.churn_probability != null && c.churn_probability > 0.4;
 
+  const custName = esc(c.full_name || (c.first_name + ' ' + c.last_name));
   const churnAlert = isChurning ? `
     <div class="churn-alert">
       <div class="icon">\u26A0\uFE0F</div>
       <div class="text">
         <h4>High Churn Risk — ${fmtPct(c.churn_probability)}</h4>
-        <p>This customer hasn't purchased in ${c.days_since_last_purchase || '?'} days and is at risk of churning.</p>
+        <p>This customer hasn't purchased in ${parseInt(c.days_since_last_purchase)||'?'} days and is at risk of churning.</p>
       </div>
       <div class="actions">
-        <button class="btn btn-danger" onclick="openRetentionModal(${c.id}, '${c.full_name || c.first_name}')">Send Retention Offer</button>
+        <button class="btn btn-danger" onclick="openRetentionModal(${parseInt(c.id)||0})">Send Retention Offer</button>
       </div>
     </div>` : '';
 
   const txHtml = (c.transactions || []).map(t => `<tr>
     <td>${fmtDate(t.order_date)}</td>
-    <td>${t.product || '—'}</td>
-    <td>${t.franchise_name || '—'}</td>
-    <td>${t.franchise_city || '—'}</td>
+    <td>${esc(t.product)}</td>
+    <td>${esc(t.franchise_name)}</td>
+    <td>${esc(t.franchise_city)}</td>
     <td style="text-align:right">${fmt(t.quantity)}</td>
     <td style="text-align:right">${fmtCur(t.totalprice || t.totalPrice)}</td>
-    <td>${t.payment_method || '—'}</td>
+    <td>${esc(t.payment_method)}</td>
   </tr>`).join('');
 
   const offersHtml = (c.retention_offers || []).map(o => `
     <div class="offer-item">
       <div class="offer-icon">\uD83C\uDF81</div>
       <div class="offer-info">
-        <div class="type">${o.offer_type}</div>
-        <div class="detail">${o.offer_detail}</div>
+        <div class="type">${esc(o.offer_type)}</div>
+        <div class="detail">${esc(o.offer_detail)}</div>
       </div>
       <div class="offer-date">${fmtDate(o.created_at)}</div>
     </div>`).join('');
@@ -843,8 +865,8 @@ function renderDetail(c) {
     <div class="detail-header">
       <div class="avatar lg">${initials}</div>
       <div class="detail-header-info">
-        <h2>${c.full_name || (c.first_name + ' ' + c.last_name)}</h2>
-        <p>${c.email_address || ''} \u00B7 ${c.city || ''}${c.state ? ', ' + c.state : ''}, ${c.country || ''}</p>
+        <h2>${custName}</h2>
+        <p>${esc(c.email_address)} \u00B7 ${esc(c.city)}${c.state ? ', ' + esc(c.state) : ''}, ${esc(c.country)}</p>
         <div class="detail-header-badges">
           ${segmentBadge(c.customer_value_segment)}
           ${segmentBadge(c.customer_connection_segment)}
@@ -882,9 +904,9 @@ function renderDetail(c) {
 
     <h3 class="section-title">Customer Details</h3>
     <div class="info-grid">
-      <div class="info-item"><div class="label">Phone</div><div class="val">${c.phone_number || '—'}</div></div>
-      <div class="info-item"><div class="label">Gender</div><div class="val">${c.gender || '—'}</div></div>
-      <div class="info-item"><div class="label">Continent</div><div class="val">${c.continent || '—'}</div></div>
+      <div class="info-item"><div class="label">Phone</div><div class="val">${esc(c.phone_number)}</div></div>
+      <div class="info-item"><div class="label">Gender</div><div class="val">${esc(c.gender)}</div></div>
+      <div class="info-item"><div class="label">Continent</div><div class="val">${esc(c.continent)}</div></div>
       <div class="info-item"><div class="label">First Purchase</div><div class="val">${fmtDate(c.first_purchase_date)}</div></div>
       <div class="info-item"><div class="label">Last Purchase</div><div class="val">${fmtDate(c.last_purchase_date)}</div></div>
       <div class="info-item"><div class="label">Days Since Last</div><div class="val">${c.days_since_last_purchase != null ? c.days_since_last_purchase + ' days' : '—'}</div></div>
@@ -894,7 +916,7 @@ function renderDetail(c) {
 
     <h3 class="section-title">
       Recent Transactions
-      <button class="btn btn-primary" onclick="openOrderModal(${c.id}, '${c.full_name || c.first_name}')">+ Place Order</button>
+      <button class="btn btn-primary" onclick="openOrderModal(${parseInt(c.id)||0})">+ Place Order</button>
     </h3>
     <table>
       <thead><tr>
@@ -906,9 +928,11 @@ function renderDetail(c) {
   `;
 }
 
-function openOrderModal(customerId, customerName) {
-  const franchiseOpts = franchises.map(f => `<option value="${f.id}">${f.franchise_name} (${f.city})</option>`).join('');
-  const productOpts = products.map(p => `<option value="${p}">${p}</option>`).join('');
+function openOrderModal(customerId) {
+  const c = allCustomers.find(x => x.id === customerId);
+  const customerName = esc(c ? (c.full_name || c.first_name) : '');
+  const franchiseOpts = franchises.map(f => `<option value="${parseInt(f.id)||0}">${esc(f.franchise_name)} (${esc(f.city)})</option>`).join('');
+  const productOpts = products.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
 
   document.getElementById('modalContainer').innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
@@ -944,7 +968,9 @@ function openOrderModal(customerId, customerName) {
     </div>`;
 }
 
-function openRetentionModal(customerId, customerName) {
+function openRetentionModal(customerId) {
+  const c = allCustomers.find(x => x.id === customerId);
+  const customerName = esc(c ? (c.full_name || c.first_name) : '');
   document.getElementById('modalContainer').innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
       <div class="modal" onclick="event.stopPropagation()">
@@ -1048,7 +1074,7 @@ async function askGenie(q) {
   input.value = '';
 
   const msgs = document.getElementById('genieMessages');
-  msgs.innerHTML += `<div class="genie-msg user"><div class="bubble">${question}</div></div>`;
+  msgs.innerHTML += `<div class="genie-msg user"><div class="bubble">${esc(question)}</div></div>`;
   msgs.innerHTML += `<div class="genie-msg bot" id="genieTyping"><div class="bubble genie-typing">Thinking...</div></div>`;
   msgs.scrollTop = msgs.scrollHeight;
   document.getElementById('genieSuggestions').style.display = 'none';
@@ -1071,7 +1097,7 @@ async function askGenie(q) {
 
     if (data.error) {
       const errMsg = typeof data.error === 'object' ? JSON.stringify(data.error) : data.error;
-      msgs.innerHTML += `<div class="genie-msg bot"><div class="bubble" style="color:#dc2626">${errMsg}</div></div>`;
+      msgs.innerHTML += `<div class="genie-msg bot"><div class="bubble" style="color:#dc2626">${esc(errMsg)}</div></div>`;
     } else {
       let html = '';
       if (data.text) {
@@ -1087,9 +1113,9 @@ async function askGenie(q) {
         const rows = qr.statement_response?.result?.data_array || [];
         if (cols.length && rows.length) {
           html += '<div class="genie-section"><div class="genie-section-label">Results</div>';
-          html += '<div class="result-table-wrap"><table class="result-table"><thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+          html += '<div class="result-table-wrap"><table class="result-table"><thead><tr>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
           const showRows = rows.slice(0, 15);
-          showRows.forEach(r => { html += '<tr>' + r.map(v => `<td>${v ?? '—'}</td>`).join('') + '</tr>'; });
+          showRows.forEach(r => { html += '<tr>' + r.map(v => `<td>${esc(v ?? '—')}</td>`).join('') + '</tr>'; });
           html += '</tbody></table></div>';
           if (rows.length > 15) html += `<div class="genie-row-count">Showing 15 of ${rows.length} rows</div>`;
           html += '</div>';
@@ -1102,7 +1128,7 @@ async function askGenie(q) {
   } catch(e) {
     const typing = document.getElementById('genieTyping');
     if (typing) typing.remove();
-    msgs.innerHTML += `<div class="genie-msg bot"><div class="bubble" style="color:#dc2626">Error: ${e.message}</div></div>`;
+    msgs.innerHTML += `<div class="genie-msg bot"><div class="bubble" style="color:#dc2626">Error: ${esc(e.message)}</div></div>`;
   }
 
   genieAsking = false;
